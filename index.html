@@ -326,17 +326,23 @@ function endTurn() {
         addLog(`獲得了 ${intent.block} 點格擋。`, "log-sys");
     }
 
+    // --- 鳴金姿態保留與觸發邏輯 ---
     if(player.stance === "鳴金") {
         if(isAtk && dmgTaken === 0) {
             addLog("鏗鏘！觸發防禦反擊！下回合產生迴天！", "log-sys");
             nextTurnCards.push({...huiTianTemplate});
             if(powers.echo) gainBlock(8);
+            
+            // 只有成功觸發反擊，才會解除鳴金姿態
+            player.stance = "Normal"; 
         } else if(!isAtk) {
-            addLog(`敵方未攻擊，無法觸發防禦反擊。`, "log-sys");
+            addLog(`敵方未攻擊，鳴金姿態將保留至下回合。`, "log-sys");
+        } else {
+            addLog(`防禦遭到突破，未觸發反擊，鳴金姿態保留。`, "log-sys");
         }
     }
     
-    player.stance = "Normal"; enemy.turn++;
+    enemy.turn++;
     if(player.hp > 0) { updateIntentUI(); startTurn(); } else checkGameOver();
 }
 
