@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>奧米爾 - 戰鬥測試 (13張直式卡牌版)</title>
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
+
+    body { 
+        font-family: 'Noto Serif TC', serif; 
+        background-color: #0a0a0a; 
+        color: #e0e0e0; 
+        margin: 0; 
+        padding: 10px; 
+        display: flex; 
+        flex-direction: column; 
+        align-items: center;
+        overflow-x: hidden;
+    }
+
+    #game-board { 
+        width: 100%; 
+        max-width: 1000px; 
+        background: linear-gradient(180deg, #1a1a1a 0%, #000 100%); 
+        border: 1px solid #332b1a; 
+        border-radius: 15px; 
+        padding: 15px; 
+        box-shadow: 0 0 50px rgba(0,0,0,0.8); 
+    }
+
+    /* 頂部狀態欄 */
+    .status-bar { 
+        display: flex; 
+        justify-content: space-between; 
+        margin-bottom: 20px; 
+        padding: 15px; 
+        background: rgba(40, 40, 40, 0.5); 
+        border-radius: 10px;
+        border: 1px solid #443311;
+    }
+    .entity { flex: 1; text-align: center; }
+    .hp { color: #ff4d4d; font-weight: bold; font-size: 1.1em; }
+    .block { color: #4dabf7; font-weight: bold; }
+    .energy { color: #ffd43b; font-weight: bold; font-size: 1.4em; text-shadow: 0 0 10px rgba(255, 212, 59, 0.5); }
+    .stance { color: #fcc419; font-weight: bold; margin-top: 5px; text-transform: uppercase; letter-spacing: 2px; }
+    .intent { color: #ff8787; font-weight: bold; margin-top: 5px; border: 1px solid #552222; background: #221111; padding: 5px; border-radius: 5px; }
+
+    /* 直式手牌區域 */
+    #hand { 
+        display: flex; 
+        justify-content: center; 
+        gap: -20px; /* 縮小重疊感，讓13張牌的牌池更容易看清 */
+        min-height: 320px; 
+        margin: 20px 0; 
+        perspective: 1000px;
+        flex-wrap: wrap;
+    }
+
+    /* 直式卡牌樣式 */
+    .card { 
+        background: #111; 
+        border: 1px solid #554422; 
+        border-radius: 12px; 
+        width: 180px; 
+        height: 280px; 
+        cursor: pointer; 
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+        position: relative; 
+        overflow: hidden;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        flex-shrink: 0;
+        margin-bottom: 15px;
+    }
+
+    .card:hover { 
+        transform: translateY(-30px) scale(1.05); 
+        z-index: 100; 
+        border-color: #ffd43b;
+        box-shadow: 0 15px 30px rgba(255, 212, 59, 0.3);
+    }
+
+    .card.disabled { opacity: 0.5; pointer-events: none; filter: grayscale(80%); }
+    .card.ethereal { border-style: dashed; }
+
+    /* 卡牌插圖區 */
+    .card-art {
+        width: 100%;
+        height: 60%;
+        background-size: cover;
+        background-position: center;
+        background-color: #222; /* 圖片若讀取失敗的底色 */
+        border-bottom: 1px solid #332b1a;
+    }
+
+    /* 卡牌費用 */
+    .card-cost { 
+        position: absolute; 
+        top: 8px; 
+        left: 8px; 
+        background: rgba(0,0,0,0.8); 
+        color: #ffd43b; 
+        width: 32px; 
+        height: 32px; 
+        border-radius: 50%; 
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        font-weight: bold; 
+        border: 2px solid #ffd43b;
+        z-index: 2;
+        font-size: 18px;
+    }
+
+    /* 卡牌文字內容 */
+    .card-info {
+        padding: 10px;
+        background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, rgba(20,20,20,0.7) 100%);
+        height: 40%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .card-name { 
+        font-weight: bold; 
+        margin-bottom: 5px; 
+        text-align: center; 
+        font-size: 15px; 
+        color: #ffd43b;
+        letter-spacing: 1px;
+    }
+
+    .card-desc { 
+        font-size: 12px; 
+        color: #bbb; 
+        line-height: 1.4; 
+        text-align: center;
+    }
+
+    /* 顏色標記 */
+    .card-dmg-text { color: #ff6b6b; font-weight: bold; }
+    .card-block-text { color: #4dabf7; font-weight: bold; }
+    .card-sys-text { color: #ffd43b; font-weight: bold; }
+
+    /* 控制與日誌 */
+    #controls { margin-top: 10px; }
+    button { 
+        padding: 12px 30px; 
+        font-size: 18px; 
+        background: #443311; 
+        color: #ffd43b; 
+        border: 1px solid #ffd43b; 
+        border-radius: 5px; 
+        cursor: pointer; 
+        font-weight: bold;
+        transition: 0.2s;
+    }
+    button:hover { background: #ffd43b; color: #000; }
+
+    #log { 
+        width: 100%; 
+        height: 120px; 
+        overflow-y: auto; 
+        background: rgba(0,0,0,0.8); 
+        padding: 10px; 
+        border-radius: 5px; 
+        margin-top: 20px; 
+        font-size: 13px; 
+        color: #999; 
+        border: 1px solid #332b1a; 
+        box-sizing: border-box;
+    }
+    .log-sys { color: #ffd43b; }
+    .log-dmg { color: #ff6b6b; }
+    .log-def { color: #4dabf7; }
+    .log-boss { color: #e599f7; font-weight: bold; }
+    
+    .buff-bar { margin-top: 5px; font-size: 12px; color: #b197fc; }
+</style>
+</head>
+<body>
+
+<div id="game-board">
+    <div class="status-bar">
+        <div class="entity">
+            <h3 style="margin: 0 0 5px 0;">奧米爾</h3>
+            <div class="hp">HP: <span id="p-hp">80</span>/80</div>
+            <div class="block">格擋: <span id="p-block">0</span></div>
+            <div class="stance" id="p-stance">姿態: 預備</div>
+            <div class="buff-bar" id="p-buffs"></div>
+        </div>
+        <div class="entity" style="display:flex; flex-direction:column; justify-content:center;">
+            <div class="energy">⚡ <span id="energy">3</span> / 3</div>
+            <div style="font-size: 11px; color: #777; margin-top:10px;">
+                牌堆: <span id="draw-count">0</span> | 棄牌: <span id="discard-count">0</span>
+            </div>
+        </div>
+        <div class="entity">
+            <h3 style="margin: 0 0 5px 0; color: #e599f7;">高階深淵史萊姆</h3>
+            <div class="hp">HP: <span id="e-hp">250</span>/250</div>
+            <div class="block">格擋: <span id="e-block">0</span></div>
+            <div id="e-buffs" style="font-size:12px; color:#ff8787;"></div>
+            <div class="intent" id="e-intent">意圖: 讀取中...</div>
+        </div>
+    </div>
+
+    <div id="hand"></div>
+
+    <div id="controls" style="text-align: center;">
+        <button onclick="endTurn()">結束回合 (End Turn)</button>
+    </div>
+
+    <div id="log"></div>
+</div>
+
+<script>
+// --- 核心資料 ---
+let player = { hp: 80, maxHp: 80, block: 0, energy: 3, maxEnergy: 3, stance: "Normal", retainAmount: 0 };
+let enemy = { hp: 250, maxHp: 250, block: 0, strength: 0, turn: 0 };
+let huiTianBuffs = { extraDmg: 0, times: 1, multiplier: 1 };
+let powers = { echo: false };
+let nextTurnCards = [];
+
+// 本機圖片檔案名稱對應 (請確保 HTML 檔案旁邊有這些圖片)
+const IMGS = {
+    HUITIAN: 'img_huitian.png',
+    ECHO: 'img_echo.png',
+    BLOCK: 'img_block.png',
+    STRIKE: 'img_strike.png',
+    SHARPEN: 'img_sharpen.png'
+};
+
+// 原始 13 張精簡卡組
+const allCards = [
+    { id: 'strike', name: '快斬', cost: 1, img: IMGS.STRIKE, desc: '對全體敵人造成 <span class="card-dmg-text">9</span> 點傷害。', play: () => dealDmg(9) },
+    { id: 'def1', name: '格擋', cost: 1, img: IMGS.BLOCK, desc: '獲得 <span class="card-block-text">6</span> 點格擋。', play: () => gainBlock(6) },
+    { id: 'ming_stance', name: '鳴陣', cost: 1, img: IMGS.BLOCK, desc: '獲得 <span class="card-block-text">4</span> 格擋，進入「鳴金」。', play: () => { gainBlock(4); setStance("鳴金"); } },
+    { id: 'bell', name: '重鑄鳴鐘', cost: 2, img: IMGS.BLOCK, desc: '獲得 <span class="card-block-text">14</span> 格擋，進入「鳴金」。', play: () => { gainBlock(14); setStance("鳴金"); } },
+    { id: 'hard', name: '大力點', cost: 2, img: IMGS.BLOCK, desc: '失 <span class="card-dmg-text">4</span> 血。獲 <span class="card-block-text">30</span> 格擋。', play: () => { loseHp(4); gainBlock(30); } },
+    { id: 'mountain', name: '斷岳', cost: 2, img: IMGS.SHARPEN, desc: '造 <span class="card-dmg-text">16</span> 傷。處於鳴金獲 <span class="card-sys-text">2</span> 能量。', play: () => { dealDmg(16); if(player.stance === "鳴金") gainEnergy(2); } },
+    { id: 'sharpen', name: '淬鋒', cost: 2, img: IMGS.SHARPEN, desc: '獲 <span class="card-block-text">12</span> 格擋。下張迴天傷害 <span class="card-dmg-text">+20</span>。', play: () => { gainBlock(12); huiTianBuffs.extraDmg += 20; updateBuffUI(); } },
+    { id: 'echo_atk', name: '重鳴', cost: 1, img: IMGS.ECHO, desc: '消耗。下張迴天觸發 <span class="card-sys-text">2</span> 次。', exhaust: true, play: () => { huiTianBuffs.times *= 2; updateBuffUI(); } },
+    { id: 'retreat', name: '退勢', cost: 1, img: IMGS.ECHO, desc: '進入鳴金，抽 <span class="card-sys-text">1</span> 張牌。', play: () => { setStance("鳴金"); drawCards(1); } },
+    { id: 'all_in', name: '破釜沉舟+', cost: 1, img: IMGS.SHARPEN, desc: '消耗。下張迴天傷害翻倍。', exhaust: true, play: () => { huiTianBuffs.multiplier *= 2; updateBuffUI(); } },
+    { id: 'echo_power', name: '餘音', cost: 1, img: IMGS.ECHO, desc: '固有。產生迴天獲 <span class="card-block-text">8</span> 格擋。', innate: true, exhaust: true, play: () => { powers.echo = true; addLog('能力生效：產生迴天時獲得格擋！', 'log-sys'); updateBuffUI(); } },
+    { id: 'ring', name: '搖鈴', cost: 1, img: IMGS.BLOCK, desc: '抽 <span class="card-sys-text">1</span>，棄牌堆頂 2，獲 <span class="card-block-text">4</span> 格擋。', play: () => { gainBlock(4); drawCards(1); } },
+    { id: 'heavy', name: '藏鋒重擊', cost: 2, img: IMGS.STRIKE, desc: '造 <span class="card-dmg-text">14</span> 傷。保留最多 <span class="card-sys-text">2</span> 張手牌。', play: () => { dealDmg(14); player.retainAmount = 2; addLog("回合結束時將保留最多 2 張手牌。", "log-sys"); } }
+];
+
+const huiTianTemplate = { id: 'huitian', name: '迴天', cost: 0, img: IMGS.HUITIAN, desc: '', exhaust: true, ethereal: true };
+
+// --- 邏輯 ---
+let drawPile = []; let discardPile = []; let hand = [];
+
+function initGame() {
+    let innateCards = allCards.filter(c => c.innate);
+    let normalCards = allCards.filter(c => !c.innate);
+    drawPile = [...normalCards]; shuffle(drawPile);
+    drawPile.push(...innateCards);
+    updateIntentUI(); startTurn();
+}
+
+function startTurn() {
+    player.energy = player.maxEnergy; player.block = 0; enemy.block = 0;
+    while(nextTurnCards.length > 0) hand.push(nextTurnCards.shift());
+    let draw = 5 - hand.length; if(draw > 0) drawCards(draw);
+    updateUI(); addLog("=== 奧米爾回合開始 ===", "log-sys");
+}
+
+function drawCards(n) {
+    for(let i=0; i<n; i++) {
+        if(drawPile.length === 0) { drawPile = [...discardPile]; discardPile = []; shuffle(drawPile); addLog("洗牌！", "log-sys"); }
+        if(hand.length < 10 && drawPile.length > 0) hand.push(drawPile.pop());
+    }
+    renderHand(); updateUI();
+}
+
+function playCard(idx) {
+    let card = hand[idx];
+    if(player.energy >= card.cost) {
+        player.energy -= card.cost; hand.splice(idx, 1);
+        addLog(`打出 【${card.name}】`);
+        if(card.id === 'huitian') playHuiTian(); else card.play();
+        if(!card.exhaust && card.id !== 'huitian') discardPile.push(card);
+        else addLog(`【${card.name}】 已消耗。`);
+        renderHand(); updateUI(); checkGameOver();
+    } else {
+        addLog("能量不足！", "log-dmg");
+    }
+}
+
+function playHuiTian() {
+    let base = 12; 
+    let singleStrikeDmg = (base + huiTianBuffs.extraDmg) * huiTianBuffs.multiplier;
+    addLog(`【迴天】觸發！單次傷害: ${singleStrikeDmg} (共 ${huiTianBuffs.times} 次)`, "log-sys");
+    for(let i=0; i<huiTianBuffs.times; i++) dealDmg(singleStrikeDmg);
+    huiTianBuffs = { extraDmg: 0, times: 1, multiplier: 1 }; updateBuffUI();
+}
+
+function endTurn() {
+    addLog("=== 史萊姆行動 ===", "log-boss");
+    let retain = []; if(player.retainAmount > 0) retain = hand.splice(0, player.retainAmount);
+    hand.forEach(c => { 
+        if(c.ethereal) addLog(`【${c.name}】 因虛無而消耗。`, "log-sys");
+        else discardPile.push(c); 
+    });
+    hand = retain; player.retainAmount = 0;
+
+    let intent = bossPattern[enemy.turn % bossPattern.length];
+    let isAtk = intent.type === "attack"; let dmgTaken = 0;
+
+    if(isAtk) {
+        let incoming = intent.baseDmg + enemy.strength;
+        dmgTaken = Math.max(0, incoming - player.block);
+        addLog(`史萊姆攻擊！造成 ${incoming} 點傷害。`, "log-dmg");
+        if(dmgTaken > 0) {
+            player.hp -= dmgTaken; addLog(`受到 ${dmgTaken} 點傷害！`, "log-dmg");
+        } else {
+            addLog(`完全防禦了攻擊！`, "log-def");
+        }
+    } else if(intent.type === "buff") {
+        enemy.strength += intent.strength;
+        addLog(`力量提升了 ${intent.strength} 點！`, "log-boss");
+    } else if(intent.type === "defend") {
+        enemy.block += intent.block;
+        addLog(`獲得了 ${intent.block} 點格擋。`, "log-sys");
+    }
+
+    if(player.stance === "鳴金") {
+        if(isAtk && dmgTaken === 0) {
+            addLog("鏗鏘！觸發防禦反擊！下回合產生迴天！", "log-sys");
+            nextTurnCards.push({...huiTianTemplate});
+            if(powers.echo) gainBlock(8);
+        } else if(!isAtk) {
+            addLog(`敵方未攻擊，無法觸發防禦反擊。`, "log-sys");
+        }
+    }
+    
+    player.stance = "Normal"; enemy.turn++;
+    if(player.hp > 0) { updateIntentUI(); startTurn(); } else checkGameOver();
+}
+
+function renderHand() {
+    const handDiv = document.getElementById('hand');
+    handDiv.innerHTML = '';
+    hand.forEach((card, i) => {
+        const dis = player.energy < card.cost ? 'disabled' : '';
+        const eth = card.ethereal ? 'ethereal' : '';
+        let desc = card.desc;
+
+        if(card.id === 'huitian') {
+            let singleDmg = (12 + huiTianBuffs.extraDmg) * huiTianBuffs.multiplier;
+            let totalDmg = singleDmg * huiTianBuffs.times;
+            desc = `虛無。消耗。造成 <span class="card-dmg-text">${totalDmg}</span> 點傷害`;
+            if(huiTianBuffs.times > 1) desc += ` (<span class="card-dmg-text">${singleDmg}</span> x ${huiTianBuffs.times}次)。`;
+            else desc += `。`;
+        }
+
+        handDiv.innerHTML += `
+            <div class="card ${dis} ${eth}" onclick="playCard(${i})" style="left: ${i*5}px">
+                <div class="card-cost">${card.cost}</div>
+                <div class="card-art" style="background-image: url('${card.img}')"></div>
+                <div class="card-info">
+                    <div class="card-name">${card.name}</div>
+                    <div class="card-desc">${desc}</div>
+                </div>
+            </div>
+        `;
+    });
+}
+
+// 輔助函式
+const bossPattern = [
+    { type: "attack", baseDmg: 15, desc: "攻擊 ({dmg})" },
+    { type: "defend", block: 20, desc: "防禦 (20)" },
+    { type: "buff", strength: 3, desc: "強化 (力量+3)" },
+    { type: "attack", baseDmg: 28, desc: "重壓 ({dmg})" },
+    { type: "attack", baseDmg: 10, desc: "酸液連打 ({dmg})" }
+];
+function updateIntentUI() {
+    let intent = bossPattern[enemy.turn % bossPattern.length];
+    let d = intent.type === "attack" ? intent.baseDmg + enemy.strength : 0;
+    document.getElementById('e-intent').innerText = "意圖: " + intent.desc.replace("{dmg}", d);
+}
+function dealDmg(a) { 
+    let actualDmg = a;
+    if(enemy.block > 0) {
+        if(a >= enemy.block) { actualDmg = a - enemy.block; enemy.block = 0; addLog(`擊破格擋！`, "log-sys"); }
+        else { enemy.block -= a; actualDmg = 0; addLog(`格擋吸收了傷害。`, "log-sys"); }
+    }
+    if(actualDmg > 0) { enemy.hp -= actualDmg; addLog(`造成 ${actualDmg} 傷害。`, "log-dmg"); }
+}
+function gainBlock(a) { player.block += a; addLog(`獲得 ${a} 格擋。`, "log-def");}
+function gainEnergy(a) { player.energy += a; addLog(`獲得 ${a} 能量。`, "log-sys");}
+function loseHp(a) { player.hp -= a; addLog(`失去 ${a} 生命。`, "log-dmg");}
+function setStance(s) { player.stance = s; addLog(`進入【${s}】姿態！`, "log-sys");}
+function shuffle(a) { for(let i=a.length-1; i>0; i--) { let j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
+function addLog(m, c='') { let l=document.getElementById('log'); l.innerHTML+=`<div class="${c}">${m}</div>`; l.scrollTop=l.scrollHeight; }
+function updateUI() {
+    document.getElementById('p-hp').innerText = player.hp;
+    document.getElementById('p-block').innerText = player.block;
+    document.getElementById('energy').innerText = player.energy;
+    document.getElementById('p-stance').innerText = "姿態: " + (player.stance === "Normal" ? "預備" : player.stance);
+    document.getElementById('e-hp').innerText = Math.max(0, enemy.hp);
+    document.getElementById('e-block').innerText = enemy.block;
+    document.getElementById('draw-count').innerText = drawPile.length;
+    document.getElementById('discard-count').innerText = discardPile.length;
+    document.getElementById('e-buffs').innerText = enemy.strength > 0 ? "力量: +" + enemy.strength : "";
+}
+function updateBuffUI() {
+    let t = "";
+    if(huiTianBuffs.extraDmg > 0) t += `傷+${huiTianBuffs.extraDmg} | `;
+    if(huiTianBuffs.times > 1) t += `x${huiTianBuffs.times} | `;
+    if(huiTianBuffs.multiplier > 1) t += `倍率x${huiTianBuffs.multiplier} | `;
+    if(powers.echo) t += `[能力:餘音]`;
+    document.getElementById('p-buffs').innerText = t;
+}
+function checkGameOver() {
+    if(enemy.hp <= 0) { updateUI(); setTimeout(() => { alert("戰鬥勝利！史萊姆被擊敗了！"); location.reload(); }, 100); }
+    else if(player.hp <= 0) { updateUI(); setTimeout(() => { alert("你被擊敗了..."); location.reload(); }, 100); }
+}
+
+initGame();
+</script>
+</body>
+</html>
