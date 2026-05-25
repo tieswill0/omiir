@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>奧米爾 - 戰鬥測試 (13張直式卡牌版)</title>
+<title>奧米爾 - 戰鬥測試 (完整詞條版)</title>
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&display=swap');
 
@@ -50,7 +50,7 @@
     #hand { 
         display: flex; 
         justify-content: center; 
-        gap: -20px; /* 縮小重疊感，讓13張牌的牌池更容易看清 */
+        gap: -20px; 
         min-height: 320px; 
         margin: 20px 0; 
         perspective: 1000px;
@@ -89,7 +89,7 @@
         height: 60%;
         background-size: cover;
         background-position: center;
-        background-color: #222; /* 圖片若讀取失敗的底色 */
+        background-color: #222; 
         border-bottom: 1px solid #332b1a;
     }
 
@@ -217,11 +217,12 @@
 // --- 核心資料 ---
 let player = { hp: 80, maxHp: 80, block: 0, energy: 3, maxEnergy: 3, stance: "Normal", retainAmount: 0 };
 let enemy = { hp: 250, maxHp: 250, block: 0, strength: 0, turn: 0 };
-let huiTianBuffs = { extraDmg: 0, times: 1, multiplier: 1 };
+
+// 核心改動：獨立詞條系統
+let huiTianBuffs = { isDeadly: false, ignoreBlock: false, refund: false };
 let powers = { echo: false };
 let nextTurnCards = [];
 
-// 本機圖片檔案名稱對應 (請確保 HTML 檔案旁邊有這些圖片)
 const IMGS = {
     HUITIAN: 'img_huitian.png',
     ECHO: 'img_echo.png',
@@ -230,7 +231,7 @@ const IMGS = {
     SHARPEN: 'img_sharpen.png'
 };
 
-// 原始 13 張精簡卡組
+// 獨立詞條版本的 13 張精簡卡組
 const allCards = [
     { id: 'strike', name: '快斬', cost: 1, img: IMGS.STRIKE, desc: '對全體敵人造成 <span class="card-dmg-text">9</span> 點傷害。', play: () => dealDmg(9) },
     { id: 'def1', name: '格擋', cost: 1, img: IMGS.BLOCK, desc: '獲得 <span class="card-block-text">6</span> 點格擋。', play: () => gainBlock(6) },
@@ -238,10 +239,13 @@ const allCards = [
     { id: 'bell', name: '重鑄鳴鐘', cost: 2, img: IMGS.BLOCK, desc: '獲得 <span class="card-block-text">14</span> 格擋，進入「鳴金」。', play: () => { gainBlock(14); setStance("鳴金"); } },
     { id: 'hard', name: '大力點', cost: 2, img: IMGS.BLOCK, desc: '失 <span class="card-dmg-text">4</span> 血。獲 <span class="card-block-text">30</span> 格擋。', play: () => { loseHp(4); gainBlock(30); } },
     { id: 'mountain', name: '斷岳', cost: 2, img: IMGS.SHARPEN, desc: '造 <span class="card-dmg-text">16</span> 傷。處於鳴金獲 <span class="card-sys-text">2</span> 能量。', play: () => { dealDmg(16); if(player.stance === "鳴金") gainEnergy(2); } },
-    { id: 'sharpen', name: '淬鋒', cost: 2, img: IMGS.SHARPEN, desc: '獲 <span class="card-block-text">12</span> 格擋。下張迴天傷害 <span class="card-dmg-text">+20</span>。', play: () => { gainBlock(12); huiTianBuffs.extraDmg += 20; updateBuffUI(); } },
-    { id: 'echo_atk', name: '重鳴', cost: 1, img: IMGS.ECHO, desc: '消耗。下張迴天觸發 <span class="card-sys-text">2</span> 次。', exhaust: true, play: () => { huiTianBuffs.times *= 2; updateBuffUI(); } },
+    
+    // 全新三張獨立詞條卡牌
+    { id: 'sharpen', name: '淬鋒', cost: 1, img: IMGS.SHARPEN, desc: '造 <span class="card-dmg-text">5</span> 傷，獲 <span class="card-block-text">5</span> 格擋。下張迴天獲「致命」(傷害變24)。', play: () => { dealDmg(5); gainBlock(5); huiTianBuffs.isDeadly = true; updateBuffUI(); } },
+    { id: 'echo_atk', name: '重鳴', cost: 1, img: IMGS.ECHO, desc: '獲 <span class="card-block-text">7</span> 格擋。下張迴天獲得「共鳴」(回2費抽1牌)。', play: () => { gainBlock(7); huiTianBuffs.refund = true; updateBuffUI(); } },
+    { id: 'pierce', name: '破陣', cost: 1, img: IMGS.SHARPEN, desc: '造成 <span class="card-dmg-text">8</span> 傷害。下張迴天獲得「無視格擋」。', play: () => { dealDmg(8); huiTianBuffs.ignoreBlock = true; updateBuffUI(); } },
+    
     { id: 'retreat', name: '退勢', cost: 1, img: IMGS.ECHO, desc: '進入鳴金，抽 <span class="card-sys-text">1</span> 張牌。', play: () => { setStance("鳴金"); drawCards(1); } },
-    { id: 'all_in', name: '破釜沉舟+', cost: 1, img: IMGS.SHARPEN, desc: '消耗。下張迴天傷害翻倍。', exhaust: true, play: () => { huiTianBuffs.multiplier *= 2; updateBuffUI(); } },
     { id: 'echo_power', name: '餘音', cost: 1, img: IMGS.ECHO, desc: '固有。產生迴天獲 <span class="card-block-text">8</span> 格擋。', innate: true, exhaust: true, play: () => { powers.echo = true; addLog('能力生效：產生迴天時獲得格擋！', 'log-sys'); updateBuffUI(); } },
     { id: 'ring', name: '搖鈴', cost: 1, img: IMGS.BLOCK, desc: '抽 <span class="card-sys-text">1</span>，棄牌堆頂 2，獲 <span class="card-block-text">4</span> 格擋。', play: () => { gainBlock(4); drawCards(1); } },
     { id: 'heavy', name: '藏鋒重擊', cost: 2, img: IMGS.STRIKE, desc: '造 <span class="card-dmg-text">14</span> 傷。保留最多 <span class="card-sys-text">2</span> 張手牌。', play: () => { dealDmg(14); player.retainAmount = 2; addLog("回合結束時將保留最多 2 張手牌。", "log-sys"); } }
@@ -289,12 +293,29 @@ function playCard(idx) {
     }
 }
 
+// 核心改動：迴天的獨立結算邏輯
 function playHuiTian() {
-    let base = 12; 
-    let singleStrikeDmg = (base + huiTianBuffs.extraDmg) * huiTianBuffs.multiplier;
-    addLog(`【迴天】觸發！單次傷害: ${singleStrikeDmg} (共 ${huiTianBuffs.times} 次)`, "log-sys");
-    for(let i=0; i<huiTianBuffs.times; i++) dealDmg(singleStrikeDmg);
-    huiTianBuffs = { extraDmg: 0, times: 1, multiplier: 1 }; updateBuffUI();
+    let finalDmg = huiTianBuffs.isDeadly ? 24 : 12;
+    addLog(`【迴天】觸發！拔刀反擊！`, "log-sys");
+    
+    // 獨立詞條1：無視格擋
+    if (huiTianBuffs.ignoreBlock) {
+        enemy.hp -= finalDmg;
+        addLog(`無視格擋！直擊弱點造成 ${finalDmg} 點傷害！`, "log-dmg");
+    } else {
+        dealDmg(finalDmg);
+    }
+
+    // 獨立詞條2：共鳴回費
+    if (huiTianBuffs.refund) {
+         gainEnergy(2);
+         drawCards(1);
+         addLog(`迴響共鳴！回收 2 點能量並抽 1 張牌。`, "log-sys");
+    }
+    
+    // 打出後重置所有詞條
+    huiTianBuffs = { isDeadly: false, ignoreBlock: false, refund: false }; 
+    updateBuffUI();
 }
 
 function endTurn() {
@@ -354,12 +375,13 @@ function renderHand() {
         const eth = card.ethereal ? 'ethereal' : '';
         let desc = card.desc;
 
+        // 迴天卡面隨詞條即時更新
         if(card.id === 'huitian') {
-            let singleDmg = (12 + huiTianBuffs.extraDmg) * huiTianBuffs.multiplier;
-            let totalDmg = singleDmg * huiTianBuffs.times;
-            desc = `虛無。消耗。造成 <span class="card-dmg-text">${totalDmg}</span> 點傷害`;
-            if(huiTianBuffs.times > 1) desc += ` (<span class="card-dmg-text">${singleDmg}</span> x ${huiTianBuffs.times}次)。`;
-            else desc += `。`;
+            let currentDmg = huiTianBuffs.isDeadly ? 24 : 12;
+            desc = `虛無。消耗。造成 <span class="card-dmg-text">${currentDmg}</span> 點傷害`;
+            if (huiTianBuffs.ignoreBlock) desc += ` <span class="card-sys-text">(無視格擋)</span>`;
+            if (huiTianBuffs.refund) desc += ` <span class="card-sys-text">(回費抽牌)</span>`;
+            desc += `。`;
         }
 
         handDiv.innerHTML += `
@@ -415,9 +437,9 @@ function updateUI() {
 }
 function updateBuffUI() {
     let t = "";
-    if(huiTianBuffs.extraDmg > 0) t += `傷+${huiTianBuffs.extraDmg} | `;
-    if(huiTianBuffs.times > 1) t += `x${huiTianBuffs.times} | `;
-    if(huiTianBuffs.multiplier > 1) t += `倍率x${huiTianBuffs.multiplier} | `;
+    if(huiTianBuffs.isDeadly) t += `致命(24傷) | `;
+    if(huiTianBuffs.ignoreBlock) t += `無視格擋 | `;
+    if(huiTianBuffs.refund) t += `共鳴(回費) | `;
     if(powers.echo) t += `[能力:餘音]`;
     document.getElementById('p-buffs').innerText = t;
 }
